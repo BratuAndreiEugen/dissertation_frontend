@@ -22,7 +22,7 @@ export default function App(): React.JSX.Element {
         </div>
 
         <a
-          href="https://github.com/your-username/your-repo"
+          href="https://github.com/BratuAndreiEugen/Dissertation_Thesis_Code"
           target="_blank"
           rel="noopener noreferrer"
           style={{
