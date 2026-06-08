@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import CsvDataViewer from './CsvDataViewer';
 
 interface ReportMetadata {
   id: string;
@@ -15,16 +16,21 @@ export default function ReportDashboard(): React.JSX.Element {
   const [reports, setReports] = useState<ReportMetadata[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  const [compareMode, setCompareMode] = useState<boolean>(false);
-  const [activePane, setActivePane] = useState<'left' | 'right'>('left');
+  
+  // 1 = Single, 2 = Split, 3 = Triple
+  const [viewMode, setViewMode] = useState<1 | 2 | 3>(1); 
+  const [activePane, setActivePane] = useState<'left' | 'middle' | 'right'>('left');
 
   const [leftReport, setLeftReport] = useState<ReportMetadata | null>(null);
+  const [middleReport, setMiddleReport] = useState<ReportMetadata | null>(null);
   const [rightReport, setRightReport] = useState<ReportMetadata | null>(null);
 
   const [leftContent, setLeftContent] = useState<string>('');
+  const [middleContent, setMiddleContent] = useState<string>('');
   const [rightContent, setRightContent] = useState<string>('');
 
   const [loadingLeft, setLoadingLeft] = useState<boolean>(false);
+  const [loadingMiddle, setLoadingMiddle] = useState<boolean>(false);
   const [loadingRight, setLoadingRight] = useState<boolean>(false);
 
   useEffect(() => {
@@ -55,11 +61,13 @@ export default function ReportDashboard(): React.JSX.Element {
         if (data.length > 0) {
           setLeftReport(data[0]);
           if (data.length > 1) setRightReport(data[1]);
+          if (data.length > 2) setMiddleReport(data[2]);
         }
       })
       .catch((err) => console.error("Error loading report index:", err));
   }, []);
 
+  // Fetch Left Report
   useEffect(() => {
     if (!leftReport) return;
     setLoadingLeft(true);
@@ -76,6 +84,24 @@ export default function ReportDashboard(): React.JSX.Element {
       });
   }, [leftReport]);
 
+  // Fetch Middle Report
+  useEffect(() => {
+    if (!middleReport) return;
+    setLoadingMiddle(true);
+    fetch(getReportUrl(middleReport))
+      .then((res) => res.text())
+      .then((text) => {
+        setMiddleContent(text);
+        setLoadingMiddle(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setMiddleContent("# Error\nCould not fetch middle report context.");
+        setLoadingMiddle(false);
+      });
+  }, [middleReport]);
+
+  // Fetch Right Report
   useEffect(() => {
     if (!rightReport) return;
     setLoadingRight(true);
@@ -93,14 +119,12 @@ export default function ReportDashboard(): React.JSX.Element {
   }, [rightReport]);
 
   const handleReportSelect = (report: ReportMetadata) => {
-    if (!compareMode) {
+    if (viewMode === 1) {
       setLeftReport(report);
     } else {
-      if (activePane === 'left') {
-        setLeftReport(report);
-      } else {
-        setRightReport(report);
-      }
+      if (activePane === 'left') setLeftReport(report);
+      else if (activePane === 'middle') setMiddleReport(report);
+      else if (activePane === 'right') setRightReport(report);
     }
     
     if (window.innerWidth <= 768) {
@@ -143,7 +167,7 @@ export default function ReportDashboard(): React.JSX.Element {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', height: '100%', fontFamily: 'sans-serif', overflow: 'hidden', position: 'relative' }}>
       
       {sidebarOpen && window.innerWidth <= 768 && (
         <div 
@@ -182,43 +206,62 @@ export default function ReportDashboard(): React.JSX.Element {
       }}>
         
         <div style={{ padding: '15px', borderBottom: '1px solid #ddd', backgroundColor: '#fff', paddingTop: '60px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', gap: '10px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input 
-                type="checkbox" 
-                checked={compareMode} 
-                onChange={(e) => {
-                  setCompareMode(e.target.checked);
-                  if (e.target.checked) setActivePane('left'); 
-                }}
-              />
-              Split Comparison Mode
-            </label>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', gap: '10px', fontSize: '14px', fontWeight: 'bold' }}>
+            View Mode:
+            <select 
+              value={viewMode} 
+              onChange={(e) => {
+                const mode = Number(e.target.value) as 1 | 2 | 3;
+                setViewMode(mode);
+                if (mode === 1) setActivePane('left');
+                if (mode === 2 && activePane === 'middle') setActivePane('right');
+              }}
+              style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              <option value={1}>Single Pane</option>
+              <option value={2}>Two Panes</option>
+              <option value={3}>Three Panes</option>
+            </select>
           </div>
 
-          {compareMode && (
+          {viewMode > 1 && (
             <div style={{ display: 'flex', gap: '5px', marginBottom: '12px' }}>
               <button 
                 onClick={() => setActivePane('left')}
                 style={{
-                  flex: 1, padding: '6px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc',
+                  flex: 1, padding: '6px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc',
                   backgroundColor: activePane === 'left' ? '#0070f3' : '#fff',
                   color: activePane === 'left' ? '#fff' : '#000',
                   fontWeight: activePane === 'left' ? 'bold' : 'normal'
                 }}
               >
-                ◀ Assign Left
+                ◀ Left
               </button>
+              
+              {viewMode === 3 && (
+                <button 
+                  onClick={() => setActivePane('middle')}
+                  style={{
+                    flex: 1, padding: '6px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc',
+                    backgroundColor: activePane === 'middle' ? '#10b981' : '#fff',
+                    color: activePane === 'middle' ? '#fff' : '#000',
+                    fontWeight: activePane === 'middle' ? 'bold' : 'normal'
+                  }}
+                >
+                  Middle
+                </button>
+              )}
+
               <button 
                 onClick={() => setActivePane('right')}
                 style={{
-                  flex: 1, padding: '6px', fontSize: '12px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc',
-                  backgroundColor: activePane === 'right' ? '#0070f3' : '#fff',
+                  flex: 1, padding: '6px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc',
+                  backgroundColor: activePane === 'right' ? '#d97706' : '#fff',
                   color: activePane === 'right' ? '#fff' : '#000',
                   fontWeight: activePane === 'right' ? 'bold' : 'normal'
                 }}
               >
-                Assign Right ▶
+                Right ▶
               </button>
             </div>
           )}
@@ -238,15 +281,23 @@ export default function ReportDashboard(): React.JSX.Element {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filteredReports.map((report) => {
             const isLeft = leftReport?.id === report.id;
-            const isRight = rightReport?.id === report.id;
+            const isMiddle = middleReport?.id === report.id && viewMode === 3;
+            const isRight = rightReport?.id === report.id && viewMode >= 2;
 
             let bgStyle = 'transparent';
-            if (compareMode) {
-              if (isLeft && isRight) bgStyle = '#e2f0d9';
-              else if (isLeft) bgStyle = '#e0f3ff';
-              else if (isRight) bgStyle = '#fef3c7';
+            let assignments = 0;
+            if (isLeft) assignments++;
+            if (isMiddle) assignments++;
+            if (isRight) assignments++;
+
+            if (assignments > 1) {
+              bgStyle = '#e2e8f0';
             } else if (isLeft) {
               bgStyle = '#e0f3ff';
+            } else if (isMiddle) {
+              bgStyle = '#e2f0d9';
+            } else if (isRight) {
+              bgStyle = '#fef3c7';
             }
 
             return (
@@ -271,9 +322,10 @@ export default function ReportDashboard(): React.JSX.Element {
                     📁 {report.workspace}
                   </span>
                 </div>
-                {compareMode && (
+                {viewMode > 1 && (
                   <div style={{ position: 'absolute', right: '10px', top: '12px', fontSize: '10px', display: 'flex', gap: '2px' }}>
                     {isLeft && <span style={{ backgroundColor: '#0070f3', color: '#fff', padding: '2px 4px', borderRadius: '3px' }}>L</span>}
+                    {isMiddle && <span style={{ backgroundColor: '#10b981', color: '#fff', padding: '2px 4px', borderRadius: '3px' }}>M</span>}
                     {isRight && <span style={{ backgroundColor: '#d97706', color: '#fff', padding: '2px 4px', borderRadius: '3px' }}>R</span>}
                   </div>
                 )}
@@ -299,14 +351,15 @@ export default function ReportDashboard(): React.JSX.Element {
           overflowY: 'auto', 
           padding: '30px', 
           paddingTop: '80px',
-          borderRight: compareMode && window.innerWidth > 992 ? '2px solid #cbd5e1' : 'none',
-          borderBottom: compareMode && window.innerWidth <= 992 ? '2px solid #cbd5e1' : 'none',
-          backgroundColor: compareMode && activePane === 'left' ? '#fafafa' : '#fff'
+          borderRight: viewMode > 1 && window.innerWidth > 992 ? '2px solid #cbd5e1' : 'none',
+          borderBottom: viewMode > 1 && window.innerWidth <= 992 ? '2px solid #cbd5e1' : 'none',
+          backgroundColor: viewMode > 1 && activePane === 'left' ? '#fafafa' : '#fff'
         }}>
           {loadingLeft ? (
             <div style={{ color: '#666', fontSize: '16px' }}>Loading left performance telemetry...</div>
           ) : (
             <div className="markdown-body" style={{ maxWidth: '800px', margin: '0 auto' }}>
+              <CsvDataViewer report={leftReport} />
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
                 {leftContent}
               </ReactMarkdown>
@@ -314,7 +367,30 @@ export default function ReportDashboard(): React.JSX.Element {
           )}
         </div>
 
-        {compareMode && (
+        {viewMode === 3 && (
+          <div style={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            padding: '30px',
+            paddingTop: window.innerWidth <= 992 ? '30px' : '80px',
+            borderRight: window.innerWidth > 992 ? '2px solid #cbd5e1' : 'none',
+            borderBottom: window.innerWidth <= 992 ? '2px solid #cbd5e1' : 'none',
+            backgroundColor: activePane === 'middle' ? '#fafafa' : '#fff'
+          }}>
+            {loadingMiddle ? (
+              <div style={{ color: '#666', fontSize: '16px' }}>Loading middle performance telemetry...</div>
+            ) : (
+              <div className="markdown-body" style={{ maxWidth: '800px', margin: '0 auto' }}>
+                <CsvDataViewer report={middleReport} />
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                  {middleContent}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+
+        {viewMode >= 2 && (
           <div style={{ 
             flex: 1, 
             overflowY: 'auto', 
@@ -326,6 +402,7 @@ export default function ReportDashboard(): React.JSX.Element {
               <div style={{ color: '#666', fontSize: '16px' }}>Loading right performance telemetry...</div>
             ) : (
               <div className="markdown-body" style={{ maxWidth: '800px', margin: '0 auto' }}>
+                <CsvDataViewer report={rightReport} />
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
                   {rightContent}
                 </ReactMarkdown>
